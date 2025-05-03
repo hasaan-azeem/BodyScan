@@ -12,7 +12,7 @@ class FitnessResult {
   final DateTime timestamp;
   final String imagePath;
   final String bodyType;
-  final double confidence;
+  final double confidence; // Confidence directly here
 
   FitnessResult({
     required this.ageGroup,
@@ -25,8 +25,10 @@ class FitnessResult {
     required this.imagePath,
     required this.bodyType,
     required this.confidence,
+    required String suggestions, // Remove suggestions
   });
 
+  // Updated toJson method without passing confidenceScore as dynamic
   Map<String, dynamic> toJson() {
     return {
       'ageGroup': ageGroup,
@@ -38,10 +40,11 @@ class FitnessResult {
       'timestamp': timestamp.toIso8601String(),
       'imagePath': imagePath,
       'bodyType': bodyType,
-      'confidence': confidence,
+      'confidence': confidence, // Now just use the confidence value directly
     };
   }
 
+  // Updated fromJson to properly extract confidence from JSON
   factory FitnessResult.fromJson(Map<String, dynamic> json) {
     return FitnessResult(
       ageGroup: json['ageGroup'],
@@ -54,6 +57,7 @@ class FitnessResult {
       imagePath: json['imagePath'],
       bodyType: json['bodyType'],
       confidence: json['confidence'],
+      suggestions: '', // Extract confidence correctly
     );
   }
 }

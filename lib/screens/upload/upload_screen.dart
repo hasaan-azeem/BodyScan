@@ -3,8 +3,9 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:fitlyzer/screens/report/fitness_result.dart';
-import 'package:fitlyzer/screens/upload/report_screen.dart';
+import 'package:fitlyzer/globals.dart';
+import 'package:fitlyzer/screens/result/fitness_result.dart';
+import 'package:fitlyzer/screens/report/report_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
@@ -12,10 +13,6 @@ import 'package:flutter/services.dart' show rootBundle;
 
 class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
-
-  double calculateBMI(double weight, double height) {
-    return weight / (height * height);
-  }
 
   @override
   _UploadScreenState createState() => _UploadScreenState();
@@ -26,7 +23,7 @@ class _UploadScreenState extends State<UploadScreen> {
   final picker = ImagePicker();
 
   final _formKey = GlobalKey<FormState>();
-  String? _sex;
+  // String? _sex;
   String? _age;
   String? _height;
   String? _weight;
@@ -35,6 +32,9 @@ class _UploadScreenState extends State<UploadScreen> {
 
   bool _loading = false;
   Map<String, dynamic>? _resultData;
+
+  List<FitnessResult> _reportHistory = [];
+  FitnessResult? _latestResult;
 
   Future<void> pickImage() async {
     final pickedFile = await picker.pickImage(source: ImageSource.gallery);
@@ -47,6 +47,9 @@ class _UploadScreenState extends State<UploadScreen> {
 
   Future<String?> predictBodyType(String imagePath) async {
     const apiKey = "2a6f941c61c44cc1ae55e7bcd45af7fd";
+    const userId = "areesha555";
+    const appId = "BodyClassifier";
+    const modelId = "BodyclassifierFinal1";
 
     final bytes = await _image!.readAsBytes();
     final base64Image = base64Encode(bytes);
@@ -61,10 +64,11 @@ class _UploadScreenState extends State<UploadScreen> {
       ],
     });
 
+    final url =
+        'https://api.clarifai.com/v2/users/$userId/apps/$appId/models/$modelId/outputs';
+
     final response = await http.post(
-      Uri.parse(
-        'https://api.clarifai.com/v2/models/BodyclassifierFinal1/versions/latest/outputs',
-      ),
+      Uri.parse(url),
       headers: {
         'Authorization': 'Key $apiKey',
         'Content-Type': 'application/json',
@@ -74,12 +78,36 @@ class _UploadScreenState extends State<UploadScreen> {
 
     if (response.statusCode == 200) {
       final result = jsonDecode(response.body);
-      final bodyType = result['outputs'][0]['data']['concepts'][0]['name'];
-      return bodyType;
+      final concepts = result['outputs'][0]['data']['concepts'];
+      final bestMatch = concepts.reduce(
+        (a, b) => a['value'] > b['value'] ? a : b,
+      );
+
+      final bodyType = bestMatch['name'];
+      final confidenceScore = bestMatch['value'];
+
+      if (concepts != null && concepts.isNotEmpty) {
+        concepts.sort(
+          (a, b) => (b['value'] as double).compareTo(a['value'] as double),
+        );
+
+        final top = concepts.first;
+        final name = top['name'];
+        final confidence = top['value'];
+
+        setState(() {
+          _resultData = {
+            'Body_type': name,
+            'Confidence': (confidence * 100).toStringAsFixed(2) + '%',
+          };
+        });
+
+        return name;
+      }
     } else {
       print('Failed to predict body type: ${response.body}');
-      return null;
     }
+    return null;
   }
 
   Future<Map<String, dynamic>?> findMatchingData(String bodyType) async {
@@ -109,10 +137,8 @@ class _UploadScreenState extends State<UploadScreen> {
         _loading = true;
       });
 
-      // Predict the body type from the image
       String? bodyType = await predictBodyType(_image!.path);
 
-      // If prediction fails, fall back to BMI-based classification
       if (bodyType == null) {
         final double parsedHeight = double.tryParse(_height ?? '') ?? 1.0;
         final double parsedWeight = double.tryParse(_weight ?? '') ?? 1.0;
@@ -127,15 +153,12 @@ class _UploadScreenState extends State<UploadScreen> {
         } else if (bmi >= 25 && bmi < 35) {
           bodyType = "Muscular";
         } else {
-          // Assuming "Muscular" for BMI ≥ 25 (you can adjust based on your needs)
           bodyType = "Overweight";
         }
       }
 
-      // Find matching data from the JSON
       var data = await findMatchingData(bodyType);
 
-      // If no matching data, use a default fitness plan
       data ??= {
         'Body_type': bodyType,
         'Exercises': 'Basic exercises suitable for your body type.',
@@ -146,10 +169,15 @@ class _UploadScreenState extends State<UploadScreen> {
         'Equipment': 'No specific equipment needed.',
       };
 
-      // Calculate BMI and prepare the result
       final double parsedHeight = double.tryParse(_height ?? '') ?? 1.0;
       final double parsedWeight = double.tryParse(_weight ?? '') ?? 1.0;
       final double bmi = calculateBMI(parsedWeight, parsedHeight);
+
+      final double confidenceScore =
+          double.tryParse(
+            _resultData!['Confidence'].toString().replaceAll('%', ''),
+          )! /
+          100;
 
       final fitnessResult = FitnessResult(
         ageGroup: _age ?? "Unknown",
@@ -161,15 +189,14 @@ class _UploadScreenState extends State<UploadScreen> {
         timestamp: DateTime.now(),
         imagePath: _image!.path,
         bodyType: data['Body_type'] ?? '',
-        confidence: 1.0, // You can calculate confidence if needed
+        confidence: confidenceScore,
+        suggestions: '',
       );
-
-      // Save the result or navigate to another screen
-      addResult(fitnessResult);
 
       setState(() {
         _loading = false;
-        _resultData = data;
+        _resultData?.addAll(data!);
+        _latestResult = fitnessResult;
       });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -180,19 +207,25 @@ class _UploadScreenState extends State<UploadScreen> {
     }
   }
 
-  void addResult(FitnessResult result) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder:
-            (context) => ReportScreen(
-              // Pass the result to the report screen
-              history: [result], // Passing a list with the result
-              reportHistory:
-                  const [], // You can pass any previous report history if needed
-            ),
-      ),
-    );
+  void addResultToHistory() {
+    if (_latestResult != null) {
+      setState(() {
+        globalReportHistory.add(_latestResult!);
+        _latestResult = null;
+        _resultData = null;
+      });
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder:
+              (context) => ReportScreen(
+                reportHistory: globalReportHistory,
+                history: globalReportHistory,
+              ),
+        ),
+      );
+    }
   }
 
   @override
@@ -231,7 +264,6 @@ class _UploadScreenState extends State<UploadScreen> {
                       key: _formKey,
                       child: Column(
                         children: [
-                          buildDropdownField(),
                           buildTextField(
                             "Age",
                             (val) => _age = val,
@@ -266,29 +298,17 @@ class _UploadScreenState extends State<UploadScreen> {
                       child: const Text('Analyze'),
                     ),
                     const SizedBox(height: 30),
-                    if (_resultData != null) buildResultSection(),
+                    if (_resultData != null) ...[
+                      buildResultSection(),
+                      const SizedBox(height: 20),
+                      ElevatedButton(
+                        onPressed: addResultToHistory,
+                        child: const Text('Save to History'),
+                      ),
+                    ],
                   ],
                 ),
               ),
-    );
-  }
-
-  Widget buildDropdownField() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: DropdownButtonFormField<String>(
-        decoration: const InputDecoration(
-          border: OutlineInputBorder(),
-          labelText: "Sex",
-        ),
-        value: _sex,
-        items:
-            ['Male', 'Female']
-                .map((sex) => DropdownMenuItem(value: sex, child: Text(sex)))
-                .toList(),
-        onChanged: (val) => setState(() => _sex = val),
-        validator: (val) => val == null || val.isEmpty ? 'Required' : null,
-      ),
     );
   }
 
@@ -306,9 +326,7 @@ class _UploadScreenState extends State<UploadScreen> {
           border: const OutlineInputBorder(),
         ),
         validator: (value) {
-          if (value == null || value.isEmpty) {
-            return 'Required';
-          }
+          if (value == null || value.isEmpty) return 'Required';
           return null;
         },
         onSaved: (value) => onSaved(value ?? ''),
@@ -362,6 +380,8 @@ class _UploadScreenState extends State<UploadScreen> {
         ),
         const SizedBox(height: 10),
         Text("Body Type: ${_resultData!['Body_type']}"),
+        if (_resultData!.containsKey('Confidence'))
+          Text("Confidence: ${_resultData!['Confidence']}"),
         Text("Fitness Goal: ${_resultData!['Fitness_Goal']}"),
         Text("Fitness Type: ${_resultData!['Fitness_Type']}"),
         Text("Exercises: ${_resultData!['Exercises']}"),

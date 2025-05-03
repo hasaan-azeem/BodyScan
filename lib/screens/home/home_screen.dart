@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fitlyzer/screens/meal/meal_suggestion_screen.dart';
 import 'package:fitlyzer/screens/profile/profile_screen.dart';
-import 'package:fitlyzer/screens/upload/report_screen.dart';
+import 'package:fitlyzer/screens/report/report_screen.dart';
 import 'package:fitlyzer/screens/upload/upload_screen.dart';
 import 'package:flutter/material.dart';
 
@@ -191,10 +191,8 @@ class _HomeTabState extends State<HomeTab> {
                       context,
                       MaterialPageRoute(
                         builder:
-                            (context) => const ReportScreen(
-                              reportHistory: [],
-                              history: [],
-                            ),
+                            (context) =>
+                                ReportScreen(reportHistory: [], history: []),
                       ),
                     );
                   },

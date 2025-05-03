@@ -1,11 +1,12 @@
-// ignore_for_file: depend_on_referenced_packages, use_super_parameters
+// ignore_for_file: use_build_context_synchronously, deprecated_member_use
 
+import 'package:fitlyzer/screens/auth/login_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({Key? key}) : super(key: key);
+  const OnboardingScreen({super.key});
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -13,114 +14,124 @@ class OnboardingScreen extends StatefulWidget {
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _controller = PageController();
-  int _currentPage = 0;
+  bool isLastPage = false;
 
-  final List<Map<String, String>> pages = [
-    {
-      "title": "Scan Your Body Instantly",
-      "desc": "Capture your posture and get real-time analysis with a tap.",
-      "image": "assets/scan.jpg",
-    },
-    {
-      "title": "AI-Based Suggestions",
-      "desc":
-          "Let AI tell you how strong or weak you are, and what to improve.",
-      "image": "assets/ai.png",
-    },
-    {
-      "title": "Smarter Fitness Journey",
-      "desc": "Get personalized meal and workout plans for real results.",
-      "image": "assets/meal.webp",
-    },
-  ];
+  void completeOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setBool('hasSeenOnboarding', true);
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final pages = [
+      buildPage(
+        image: 'assets/scan.jpg',
+        title: "Scan Your Body Instantly",
+        subtitle: "Capture your posture and get real-time analysis with a tap.",
+      ),
+      buildPage(
+        image: 'assets/ai.jpg',
+        title: "AI-Based Suggestions",
+        subtitle:
+            "Let AI tell you how strong or weak you are, and what to improve.",
+      ),
+      buildPage(
+        image: 'assets/meal_.jpg',
+        title: "Smarter Fitness Journey",
+        subtitle: "Get personalized meal and workout plans for real results.",
+      ),
+    ];
+
     return Scaffold(
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: PageView.builder(
+          PageView.builder(
+            controller: _controller,
+            itemCount: pages.length,
+            onPageChanged: (index) {
+              setState(() => isLastPage = index == pages.length - 1);
+            },
+            itemBuilder: (_, index) => pages[index],
+          ),
+          Positioned(
+            bottom: 80,
+            left: 20,
+            child: SmoothPageIndicator(
               controller: _controller,
-              itemCount: pages.length,
-              onPageChanged: (index) => setState(() => _currentPage = index),
-              itemBuilder: (context, index) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child:
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Image.asset(
-                            pages[index]["image"]!,
-                            height: 250,
-                            fit: BoxFit.contain,
-                          ),
-                          const SizedBox(height: 30),
-                          Text(
-                            pages[index]["title"]!,
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.poppins(
-                              fontSize: 24,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            pages[index]["desc"]!,
-                            textAlign: TextAlign.center,
-                            style: GoogleFonts.nunito(fontSize: 16),
-                          ),
-                        ],
-                      ).animate().fadeIn(),
-                );
-              },
+              count: pages.length,
+              // ignore: prefer_const_constructors
+              effect: WormEffect(
+                activeDotColor: Colors.green,
+                dotHeight: 10,
+                dotWidth: 10,
+              ),
             ),
           ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(
-              pages.length,
-              (index) => Container(
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                width: _currentPage == index ? 16 : 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color:
-                      _currentPage == index ? Colors.green : Colors.grey[300],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
+          Positioned(
+            top: 60,
+            right: 20,
+            child: TextButton(
+              onPressed: completeOnboarding,
+              child: const Text("Skip", style: TextStyle(color: Colors.white)),
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.green,
+        onPressed: () {
+          if (isLastPage) {
+            completeOnboarding();
+          } else {
+            _controller.nextPage(
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeInOut,
+            );
+          }
+        },
+        child: Icon(isLastPage ? Icons.check : Icons.arrow_forward),
+      ),
+    );
+  }
+
+  Widget buildPage({
+    required String image,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage(image),
+          fit: BoxFit.cover,
+          colorFilter: ColorFilter.mode(
+            Colors.black.withOpacity(0.72),
+            BlendMode.darken,
+          ),
+        ),
+      ),
+      padding: const EdgeInsets.all(30),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: ElevatedButton(
-              onPressed: () {
-                if (_currentPage == pages.length - 1) {
-                  Navigator.pushReplacementNamed(context, '/login');
-                } else {
-                  _controller.nextPage(
-                    duration: const Duration(milliseconds: 400),
-                    curve: Curves.easeInOut,
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Color(0xFFFFFAFB),
-                minimumSize: const Size(double.infinity, 50),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(30),
-                ),
-              ),
-              child: Text(
-                _currentPage == pages.length - 1 ? "Get Started" : "Next",
-                style: GoogleFonts.poppins(fontSize: 18, color: Colors.black),
-              ),
-            ),
+          Text(
+            subtitle,
+            style: const TextStyle(color: Colors.white70, fontSize: 18),
           ),
-          const SizedBox(height: 24),
         ],
       ),
     );
