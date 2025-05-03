@@ -1,4 +1,4 @@
-// ignore_for_file: library_private_types_in_public_api, use_build_context_synchronously, avoid_print
+// ignore_for_file: library_private_types_in_public_api, use_build_context_synchronously, avoid_print, unused_local_variable
 
 import 'dart:convert';
 import 'dart:io';
@@ -33,7 +33,6 @@ class _UploadScreenState extends State<UploadScreen> {
   bool _loading = false;
   Map<String, dynamic>? _resultData;
 
-  List<FitnessResult> _reportHistory = [];
   FitnessResult? _latestResult;
 
   Future<void> pickImage() async {
